@@ -2,7 +2,7 @@
 // ************************************************************************
 //
 //                        Kokkos v. 4.0
-//       Copyright (2022) National Technology & Engineering
+//       Copyright (2024) National Technology & Engineering
 //               Solutions of Sandia, LLC (NTESS).
 //
 // Under the terms of Contract DE-NA0003525 with NTESS,
@@ -16,29 +16,30 @@
 //
 //@HEADER
 
-#ifndef KOKKOS_REMOTESPACES_SHMEM_DATAHANDLE_HPP
-#define KOKKOS_REMOTESPACES_SHMEM_DATAHANDLE_HPP
+#ifndef KOKKOS_REMOTESPACES_ISHMEM_DATAHANDLE_HPP
+#define KOKKOS_REMOTESPACES_ISHMEM_DATAHANDLE_HPP
 
 namespace Kokkos {
 namespace Impl {
 
 template <class T, class Traits>
-struct SHMEMDataHandle {
+struct ISHMEMDataHandle {
   T *ptr;
-
   KOKKOS_INLINE_FUNCTION
-  SHMEMDataHandle() : ptr(NULL) {}
-
+  ISHMEMDataHandle() : ptr(NULL) {}
   KOKKOS_INLINE_FUNCTION
-  SHMEMDataHandle(T *ptr_) : ptr(ptr_) {}
-
+  ISHMEMDataHandle(T *ptr_) : ptr(ptr_) {}
   KOKKOS_INLINE_FUNCTION
-  SHMEMDataHandle(SHMEMDataHandle<T, Traits> const &arg) : ptr(arg.ptr) {}
+  ISHMEMDataHandle(ISHMEMDataHandle<T, Traits> const &arg) : ptr(arg.ptr) {}
+
+  template <typename SrcTraits>
+  KOKKOS_INLINE_FUNCTION ISHMEMDataHandle(SrcTraits const &arg)
+      : ptr(arg.ptr) {}
 
   template <typename iType>
-  KOKKOS_INLINE_FUNCTION SHMEMDataElement<T, Traits> operator()(
+  KOKKOS_INLINE_FUNCTION ISHMEMDataElement<T, Traits> operator()(
       const int &pe, const iType &i) const {
-    SHMEMDataElement<T, Traits> element(ptr, pe, i);
+    ISHMEMDataElement<T, Traits> element(ptr, pe, i);
     return element;
   }
 
@@ -67,13 +68,13 @@ struct BlockDataHandle {
 
   KOKKOS_INLINE_FUNCTION
   void get() {
-    SHMEMBlockDataElement<T, Traits> element(dst, src, elems, pe);
+    ISHMEMBlockDataElement<T, Traits> element(dst, src, elems, pe);
     element.get();
   }
 
   KOKKOS_INLINE_FUNCTION
   void put() {
-    SHMEMBlockDataElement<T, Traits> element(dst, src, elems, pe);
+    ISHMEMBlockDataElement<T, Traits> element(dst, src, elems, pe);
     element.put();
   }
 };
@@ -82,10 +83,10 @@ template <class Traits>
 struct ViewDataHandle<
     Traits, typename std::enable_if<std::is_same<
                 typename Traits::specialize,
-                Kokkos::Experimental::RemoteSpaceSpecializeTag>::value>::type> {
+                Kokkos::Experimental::RemoteSpaceSpecializeTag>::value>> {
   using value_type  = typename Traits::value_type;
-  using handle_type = SHMEMDataHandle<value_type, Traits>;
-  using return_type = SHMEMDataElement<value_type, Traits>;
+  using handle_type = ISHMEMDataHandle<value_type, Traits>;
+  using return_type = ISHMEMDataElement<value_type, Traits>;
   using track_type  = Kokkos::Impl::SharedAllocationTracker;
 
   template <class SrcHandleType>
@@ -121,4 +122,4 @@ struct ViewDataHandle<
 }  // namespace Impl
 }  // namespace Kokkos
 
-#endif  // KOKKOS_REMOTESPACES_SHMEM_DATAHANDLE_HPP
+#endif  // KOKKOS_REMOTESPACES_ISHMEM_DATAHANDLE_HPP
