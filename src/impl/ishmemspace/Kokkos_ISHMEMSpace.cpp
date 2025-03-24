@@ -18,6 +18,8 @@
 
 #include <Kokkos_ISHMEMSpace.hpp>
 #include <ishmem.h>
+#include <ishmem/err.h>
+#include <ishmem/copy.h>
 
 namespace Kokkos {
 namespace Experimental {
@@ -33,6 +35,20 @@ void ISHMEMSpace::impl_set_allocation_mode(const int allocation_mode_) {
 void ISHMEMSpace::impl_set_extent(const int64_t extent_) { extent = extent_; }
 
 void *ISHMEMSpace::allocate(const size_t arg_alloc_size) const {
+  return allocate("[unlabeled]", arg_alloc_size);
+}
+
+void *ISHMEMSpace::allocate(const char *arg_label, const size_t arg_alloc_size,
+                            const size_t arg_logical_size) const {
+  return impl_allocate(arg_label, arg_alloc_size, arg_logical_size);
+}
+
+void *ISHMEMSpace::impl_allocate(
+    const char *arg_label, const size_t arg_alloc_size,
+    const size_t arg_logical_size,
+    const Kokkos::Tools::SpaceHandle arg_handle) const {
+  const size_t reported_size =
+      (arg_logical_size > 0) ? arg_logical_size : arg_alloc_size;
   static_assert(sizeof(void *) == sizeof(uintptr_t),
                 "Error sizeof(void*) != sizeof(uintptr_t)");
 
@@ -40,66 +56,77 @@ void *ISHMEMSpace::allocate(const size_t arg_alloc_size) const {
       Kokkos::Impl::is_integral_power_of_two(Kokkos::Impl::MEMORY_ALIGNMENT),
       "Memory alignment must be power of two");
 
-  void *ptr = 0;
+  constexpr uintptr_t alignment      = Kokkos::Impl::MEMORY_ALIGNMENT;
+  constexpr uintptr_t alignment_mask = alignment - 1;
+
+  void *ptr = nullptr;
+
   if (arg_alloc_size) {
+    // Over-allocate to and round up to guarantee proper alignment.
+    size_t size_padded = arg_alloc_size + sizeof(void *) + alignment;
+
     if (allocation_mode == Kokkos::Experimental::Symmetric) {
-      //int num_pes = ishmem_n_pes(info);
-      //int my_id   = ishmem_my_pe(info);
-      ptr         = ishmem_malloc(arg_alloc_size);
+      ptr = ishmem_malloc(size_padded);
     } else {
       Kokkos::abort("ISHMEMSpace only supports symmetric allocation policy.");
     }
   }
+
+  using MemAllocFailure =
+      Kokkos::Impl::Experimental::RemoteSpacesMemoryAllocationFailure;
+  using MemAllocFailureMode = Kokkos::Impl::Experimental::
+      RemoteSpacesMemoryAllocationFailure::FailureMode;
+
+  if ((ptr == nullptr) || (reinterpret_cast<uintptr_t>(ptr) == ~uintptr_t(0)) ||
+      (reinterpret_cast<uintptr_t>(ptr) & alignment_mask)) {
+    MemAllocFailureMode failure_mode =
+        MemAllocFailureMode::AllocationNotAligned;
+    if (ptr == nullptr) {
+      failure_mode = MemAllocFailureMode::OutOfMemoryError;
+    }
+
+    MemAllocFailure::AllocationMechanism alloc_mec =
+        MemAllocFailure::AllocationMechanism::ISHMEMMALLOC;
+    throw MemAllocFailure(arg_alloc_size, alignment, failure_mode, alloc_mec);
+  }
+
+  if (Kokkos::Profiling::profileLibraryLoaded()) {
+    Kokkos::Profiling::allocateData(arg_handle, arg_label, ptr, reported_size);
+  }
   return ptr;
 }
 
-void ISHMEMSpace::deallocate(void *const arg_alloc_ptr, const size_t) const {
-  ishmem_free(arg_alloc_ptr);
+void ISHMEMSpace::deallocate(void *const arg_alloc_ptr,
+                             const size_t arg_alloc_size) const {
+  deallocate("[unlabeled]", arg_alloc_ptr, arg_alloc_size);
 }
 
-void ISHMEMSpace::fence() {
-  Kokkos::fence();
-  ishmem_fence();
+void ISHMEMSpace::deallocate(const char *arg_label, void *const arg_alloc_ptr,
+                             const size_t arg_alloc_size,
+                             const size_t arg_logical_size) const {
+  impl_deallocate(arg_label, arg_alloc_ptr, arg_alloc_size, arg_logical_size);
 }
 
-KOKKOS_FUNCTION
-int get_num_pes() {
-  return ishmem_n_pes();
-}
-
-KOKKOS_FUNCTION
-int get_my_pe() {
-  return ishmem_my_pe();
-}
-
-KOKKOS_FUNCTION
-size_t get_indexing_block_size(size_t size) {
-  size_t num_pes, block;
-  num_pes = get_num_pes();
-  block   = (size + num_pes - 1) / num_pes;
-  return block;
-}
-
-std::pair<size_t, size_t> getRange(size_t size, size_t pe) {
-  size_t start, end;
-  size_t block = get_indexing_block_size(size);
-  start        = pe * block;
-  end          = (pe + 1) * block;
-
-  size_t num_pes = get_num_pes();
-
-  if (size < num_pes) {
-    size_t diff = (num_pes * block) - size;
-    if (pe > num_pes - 1 - diff) end--;
-  } else {
-    if (pe == num_pes - 1) {
-      size_t diff = size - (num_pes - 1) * block;
-      end         = start + diff;
+void ISHMEMSpace::impl_deallocate(
+    const char *arg_label, void *const arg_alloc_ptr,
+    const size_t arg_alloc_size, const size_t arg_logical_size,
+    const Kokkos::Tools::SpaceHandle arg_handle) const {
+  if (arg_alloc_ptr) {
+    Kokkos::fence("HostSpace::impl_deallocate before free");
+    size_t reported_size =
+        (arg_logical_size > 0) ? arg_logical_size : arg_alloc_size;
+    if (Kokkos::Profiling::profileLibraryLoaded()) {
+      Kokkos::Profiling::deallocateData(arg_handle, arg_label, arg_alloc_ptr,
+                                        reported_size);
     }
-    end--;
+    ishmem_free(arg_alloc_ptr);
   }
-  return std::make_pair(start, end);
 }
+
+void ISHMEMSpace::fence() { ishmem_barrier_all(); }
+
+size_t get_num_pes() { return ishmem_n_pes(); }
+size_t get_my_pe() { return ishmem_my_pe(); }
 
 }  // namespace Experimental
 
@@ -108,13 +135,21 @@ namespace Impl {
 Kokkos::Impl::DeepCopy<HostSpace, Kokkos::Experimental::ISHMEMSpace>::DeepCopy(
     void *dst, const void *src, size_t n) {
   Kokkos::Experimental::ISHMEMSpace().fence();
-  memcpy(dst, src, n);
+  ishmem_copy(dst, src, n);
 }
 
 Kokkos::Impl::DeepCopy<Kokkos::Experimental::ISHMEMSpace, HostSpace>::DeepCopy(
     void *dst, const void *src, size_t n) {
   Kokkos::Experimental::ISHMEMSpace().fence();
-  memcpy(dst, src, n);
+  ishmem_copy(dst, src, n);
+}
+
+Kokkos::Impl::DeepCopy<Kokkos::Experimental::ISHMEMSpace,
+                       Kokkos::Experimental::ISHMEMSpace>::DeepCopy(void *dst,
+                                                                    const void
+                                                                        *src,
+                                                                    size_t n) {
+  ishmem_copy(dst, src, n);
 }
 
 template <typename ExecutionSpace>
@@ -123,7 +158,7 @@ Kokkos::Impl::DeepCopy<Kokkos::Experimental::ISHMEMSpace,
                        ExecutionSpace>::DeepCopy(void *dst, const void *src,
                                                  size_t n) {
   Kokkos::Experimental::ISHMEMSpace().fence();
-  memcpy(dst, src, n);
+  ishmem_copy(dst, src, n);
 }
 
 template <typename ExecutionSpace>
@@ -133,19 +168,7 @@ Kokkos::Impl::DeepCopy<Kokkos::Experimental::ISHMEMSpace,
                                                  void *dst, const void *src,
                                                  size_t n) {
   Kokkos::Experimental::ISHMEMSpace().fence();
-  memcpy(dst, src, n);
-}
-
-// Currently not invoked. We need a better local_deep_copy overload that
-// recognizes consecutive memory regions
-void local_deep_copy_get(void *dst, const void *src, size_t pe, size_t n) {
-  ishmem_getmem(dst, src, pe, n);
-}
-
-// Currently not invoked. We need a better local_deep_copy overload that
-// recognizes consecutive memory regions
-void local_deep_copy_put(void *dst, const void *src, size_t pe, size_t n) {
-  ishmem_putmem(dst, src, pe, n);
+  ishmem_copy(dst, src, n);
 }
 
 }  // namespace Impl

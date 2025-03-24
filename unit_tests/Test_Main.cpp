@@ -55,12 +55,7 @@ int main(int argc, char *argv[]) {
 #endif
 
 #ifdef KRS_ENABLE_ISHMEMSPACE
-  ishmem_attr_t attr;
-
-  attr.runtime = ISHMEM_RUNTIME_OPENSHMEM;
-  attr.initialize_runtime = true;
-  attr.gpu = true;
-  ishmem_init_attr(&attr);
+  ishmem_init();
 #endif
 
   Kokkos::initialize(argc, argv);

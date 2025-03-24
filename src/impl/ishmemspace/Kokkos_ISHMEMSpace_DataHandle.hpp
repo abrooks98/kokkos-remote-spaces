@@ -25,16 +25,15 @@ namespace Impl {
 template <class T, class Traits>
 struct ISHMEMDataHandle {
   T *ptr;
+
   KOKKOS_INLINE_FUNCTION
   ISHMEMDataHandle() : ptr(NULL) {}
+
   KOKKOS_INLINE_FUNCTION
   ISHMEMDataHandle(T *ptr_) : ptr(ptr_) {}
+
   KOKKOS_INLINE_FUNCTION
   ISHMEMDataHandle(ISHMEMDataHandle<T, Traits> const &arg) : ptr(arg.ptr) {}
-
-  template <typename SrcTraits>
-  KOKKOS_INLINE_FUNCTION ISHMEMDataHandle(SrcTraits const &arg)
-      : ptr(arg.ptr) {}
 
   template <typename iType>
   KOKKOS_INLINE_FUNCTION ISHMEMDataElement<T, Traits> operator()(
@@ -83,7 +82,7 @@ template <class Traits>
 struct ViewDataHandle<
     Traits, typename std::enable_if<std::is_same<
                 typename Traits::specialize,
-                Kokkos::Experimental::RemoteSpaceSpecializeTag>::value>> {
+                Kokkos::Experimental::RemoteSpaceSpecializeTag>::value>::type> {
   using value_type  = typename Traits::value_type;
   using handle_type = ISHMEMDataHandle<value_type, Traits>;
   using return_type = ISHMEMDataElement<value_type, Traits>;

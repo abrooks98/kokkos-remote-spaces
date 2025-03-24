@@ -145,6 +145,9 @@ void KOKKOS_INLINE_FUNCTION local_deep_copy_contiguous(
 #ifdef KRS_ENABLE_NVSHMEMSPACE
       nvshmem_quiet();
 #endif
+#ifdef KRS_ENABLE_ISHMEMSPACE
+      ishmem_quiet();
+#endif
     });
   } else if (dst_rank != my_rank) {
     Kokkos::single(Kokkos::PerTeam(team), [&]() {
@@ -163,6 +166,9 @@ void KOKKOS_INLINE_FUNCTION local_deep_copy_contiguous(
 #endif
 #ifdef KRS_ENABLE_NVSHMEMSPACE
       nvshmem_quiet();
+#endif
+#ifdef KRS_ENABLE_ISHMEMSPACE
+      ishmem_quiet();
 #endif
     });
   } else {
@@ -221,6 +227,9 @@ void KOKKOS_INLINE_FUNCTION local_deep_copy_contiguous(
 #ifdef KRS_ENABLE_NVSHMEMSPACE
     nvshmem_quiet();
 #endif
+#ifdef KRS_ENABLE_ISHMEMSPACE
+      ishmem_quiet();
+#endif
   } else if (dst_rank != my_rank) {
 #ifdef KRS_ENABLE_MPISPACE
     dst_data_block_t data_block = dst_data_block_t(
@@ -236,6 +245,9 @@ void KOKKOS_INLINE_FUNCTION local_deep_copy_contiguous(
 #endif
 #ifdef KRS_ENABLE_NVSHMEMSPACE
     nvshmem_quiet();
+#endif
+#ifdef KRS_ENABLE_ISHMEMSPACE
+      ishmem_quiet();
 #endif
   } else {
     static_assert("Unable to determine view data location");

@@ -47,23 +47,35 @@ class ISHMEMSpace {
   using size_type    = size_t;
 
   ISHMEMSpace();
-  ISHMEMSpace(ISHMEMSpace &&rhs)      = default;
-  ISHMEMSpace(const ISHMEMSpace &rhs) = default;
-  ISHMEMSpace &operator=(ISHMEMSpace &&) = default;
+  ISHMEMSpace(ISHMEMSpace &&rhs)              = default;
+  ISHMEMSpace(const ISHMEMSpace &rhs)         = default;
+  ISHMEMSpace &operator=(ISHMEMSpace &&)      = default;
   ISHMEMSpace &operator=(const ISHMEMSpace &) = default;
-  ~ISHMEMSpace()                               = default;
+  ~ISHMEMSpace()                              = default;
 
   explicit ISHMEMSpace(const MPI_Comm &);
 
   void *allocate(const size_t arg_alloc_size) const;
+  void *allocate(const char *arg_label, const size_t arg_alloc_size,
+                 const size_t arg_logical_size = 0) const;
 
   void deallocate(void *const arg_alloc_ptr, const size_t arg_alloc_size) const;
+  void deallocate(const char *arg_label, void *const arg_alloc_ptr,
+                  const size_t arg_alloc_size,
+                  const size_t arg_logical_size = 0) const;
 
-  void *allocate(const int *gids, const int &arg_local_alloc_size) const;
+ private:
+  void *impl_allocate(const char *arg_label, const size_t arg_alloc_size,
+                      const size_t arg_logical_size = 0,
+                      const Kokkos::Tools::SpaceHandle =
+                          Kokkos::Tools::make_space_handle(name())) const;
+  void impl_deallocate(const char *arg_label, void *const arg_alloc_ptr,
+                       const size_t arg_alloc_size,
+                       const size_t arg_logical_size = 0,
+                       const Kokkos::Tools::SpaceHandle =
+                           Kokkos::Tools::make_space_handle(name())) const;
 
-  void deallocate(const int *gids, void *const arg_alloc_ptr,
-                  const size_t arg_alloc_size) const;
-
+ public:
   /**\brief Return Name of the MemorySpace */
   static constexpr const char *name() { return m_name; }
 
@@ -81,13 +93,8 @@ class ISHMEMSpace {
       Kokkos::Experimental::ISHMEMSpace, void>;
 };
 
-KOKKOS_FUNCTION
-int get_num_pes();
-KOKKOS_FUNCTION
-int get_my_pe();
-KOKKOS_FUNCTION
-size_t get_indexing_block_size(size_t size);
-std::pair<size_t, size_t> getRange(size_t size, size_t pe);
+SYCL_EXTERNAL size_t get_num_pes();
+SYCL_EXTERNAL size_t get_my_pe();
 
 }  // namespace Experimental
 }  // namespace Kokkos
@@ -103,6 +110,12 @@ struct DeepCopy<HostSpace, Kokkos::Experimental::ISHMEMSpace> {
 template <>
 struct DeepCopy<Kokkos::Experimental::ISHMEMSpace, HostSpace> {
   DeepCopy(void *dst, const void *src, size_t);
+};
+
+template <>
+struct DeepCopy<Kokkos::Experimental::ISHMEMSpace,
+                Kokkos::Experimental::ISHMEMSpace> {
+  DeepCopy(void *dst, const void *src, size_t n);
 };
 
 template <class ExecutionSpace>

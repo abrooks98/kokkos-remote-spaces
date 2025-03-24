@@ -26,20 +26,22 @@ namespace Impl {
 
 template <>
 class SharedAllocationRecord<Kokkos::Experimental::ISHMEMSpace, void>
-    : public SharedAllocationRecord<void, void> {
+    : public SharedAllocationRecordCommon<Kokkos::Experimental::ISHMEMSpace> {
  private:
   friend Kokkos::Experimental::ISHMEMSpace;
+  friend class SharedAllocationRecordCommon<Kokkos::Experimental::ISHMEMSpace>;
 
-  typedef SharedAllocationRecord<void, void> RecordBase;
+  using base_t = SharedAllocationRecordCommon<Kokkos::Experimental::ISHMEMSpace>;
+  using RecordBase = SharedAllocationRecord<void, void>;
 
-  SharedAllocationRecord(const SharedAllocationRecord &) = delete;
+  SharedAllocationRecord(const SharedAllocationRecord &)            = delete;
   SharedAllocationRecord &operator=(const SharedAllocationRecord &) = delete;
 
-  static void deallocate(RecordBase *);
-
+#ifdef KOKKOS_ENABLE_DEBUG
   /**\brief  Root record for tracked allocations from this ISHMEMSpace instance
    */
   static RecordBase s_root_record;
+#endif
 
   const Kokkos::Experimental::ISHMEMSpace m_space;
 
@@ -49,10 +51,22 @@ class SharedAllocationRecord<Kokkos::Experimental::ISHMEMSpace, void>
 
   template <typename ExecutionSpace>
   SharedAllocationRecord(
-      const ExecutionSpace &execution_space,
+      const ExecutionSpace& /* exec_space */,
       const Kokkos::Experimental::ISHMEMSpace &arg_space,
       const std::string &arg_label, const size_t arg_alloc_size,
-      const RecordBase::function_type arg_dealloc = &deallocate);
+      const RecordBase::function_type arg_dealloc = &deallocate)
+      : base_t(
+#ifdef KOKKOS_ENABLE_DEBUG
+          &SharedAllocationRecord<Kokkos::Experimental::ISHMEMSpace,
+                                  void>::s_root_record,
+#endif
+          Impl::checked_allocation_with_header(arg_space, arg_label,
+                                               arg_alloc_size),
+          sizeof(SharedAllocationHeader) + arg_alloc_size, arg_dealloc,
+          arg_label),
+      m_space(arg_space) {
+    fill_host_accessible_header_info(this, *RecordBase::m_alloc_ptr, arg_label);
+  }
 
   SharedAllocationRecord(
       const Kokkos::Experimental::ISHMEMSpace &arg_space,
@@ -60,40 +74,14 @@ class SharedAllocationRecord<Kokkos::Experimental::ISHMEMSpace, void>
       const RecordBase::function_type arg_dealloc = &deallocate);
 
  public:
-  inline std::string get_label() const {
-    SharedAllocationHeader header;
-    Kokkos::Impl::DeepCopy<Kokkos::HostSpace, Kokkos::Experimental::SYCLDeviceUSMSpace>(
-        &header, RecordBase::head(), sizeof(SharedAllocationHeader));
-    return std::string(header.m_label);
-  }
-
   KOKKOS_INLINE_FUNCTION static SharedAllocationRecord *allocate(
       const Kokkos::Experimental::ISHMEMSpace &arg_space,
       const std::string &arg_label, const size_t arg_alloc_size) {
-#if defined(KOKKOS_ACTIVE_EXECUTION_MEMORY_SPACE_HOST)
-    return new SharedAllocationRecord(arg_space, arg_label, arg_alloc_size);
-#else
-    return (SharedAllocationRecord *)0;
-#endif
+    KOKKOS_IF_ON_HOST((return new SharedAllocationRecord(arg_space, arg_label,
+                                                         arg_alloc_size);))
+    KOKKOS_IF_ON_DEVICE(((void)arg_space; (void)arg_label; (void)arg_alloc_size;
+                         return nullptr;))
   }
-
-  /**\brief  Allocate tracked memory in the space */
-  static void *allocate_tracked(
-      const Kokkos::Experimental::ISHMEMSpace &arg_space,
-      const std::string &arg_label, const size_t arg_alloc_size);
-
-  /**\brief  Reallocate tracked memory in the space */
-  static void *reallocate_tracked(void *const arg_alloc_ptr,
-                                  const size_t arg_alloc_size);
-
-  /**\brief  Deallocate tracked memory in the space */
-  static void deallocate_tracked(void *const arg_alloc_ptr);
-
-  static SharedAllocationRecord *get_record(void *arg_alloc_ptr);
-
-  static void print_records(std::ostream &,
-                            const Kokkos::Experimental::ISHMEMSpace &,
-                            bool detail = false);
 };
 
 }  // namespace Impl

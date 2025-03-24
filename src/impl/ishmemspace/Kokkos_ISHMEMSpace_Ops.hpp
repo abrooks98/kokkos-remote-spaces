@@ -66,6 +66,27 @@ KOKKOS_REMOTESPACES_G(double, ishmem_double_g)
 
 #undef KOKKOS_REMOTESPACES_G
 
+#define KOKKOS_REMOTESPACES_G_3(type, op)             \
+  static KOKKOS_INLINE_FUNCTION void shmem_type_g_3 ( \
+      type *dst, type *const src, const int pe) {     \
+    return op(dst, src, 3, pe);                       \
+  }
+
+KOKKOS_REMOTESPACES_G_3(char, ishmem_char_get)
+KOKKOS_REMOTESPACES_G_3(unsigned char, ishmem_uchar_get)
+KOKKOS_REMOTESPACES_G_3(short, ishmem_short_get)
+KOKKOS_REMOTESPACES_G_3(unsigned short, ishmem_ushort_get)
+KOKKOS_REMOTESPACES_G_3(int, ishmem_int_get)
+KOKKOS_REMOTESPACES_G_3(unsigned int, ishmem_uint_get)
+KOKKOS_REMOTESPACES_G_3(long, ishmem_long_get)
+KOKKOS_REMOTESPACES_G_3(unsigned long, ishmem_ulong_get)
+KOKKOS_REMOTESPACES_G_3(long long, ishmem_longlong_get)
+KOKKOS_REMOTESPACES_G_3(unsigned long long, ishmem_ulonglong_get)
+KOKKOS_REMOTESPACES_G_3(float, ishmem_float_get)
+KOKKOS_REMOTESPACES_G_3(double, ishmem_double_get)
+
+#undef KOKKOS_REMOTESPACES_G
+
 #define KOKKOS_REMOTESPACES_ATOMIC_SET(type, op)            \
   static KOKKOS_INLINE_FUNCTION void shmem_type_atomic_set( \
       type *ptr, type value, int pe) {                      \
@@ -165,6 +186,8 @@ KOKKOS_REMOTESPACES_ATOMIC_SWAP(unsigned long, ishmem_ulong_atomic_swap)
 KOKKOS_REMOTESPACES_ATOMIC_SWAP(long long, ishmem_longlong_atomic_swap)
 KOKKOS_REMOTESPACES_ATOMIC_SWAP(unsigned long long,
                                 ishmem_ulonglong_atomic_swap)
+KOKKOS_REMOTESPACES_ATOMIC_SWAP(float, ishmem_float_atomic_swap)
+KOKKOS_REMOTESPACES_ATOMIC_SWAP(double, ishmem_double_atomic_swap)
 
 #undef KOKKOS_REMOTESPACES_ATOMIC_SWAP
 
@@ -795,6 +818,29 @@ struct ISHMEMDataElement<
     return tmp;
   }
 };
+
+/*
+// Operators for double3 type
+template <class T, class Traits>
+struct ISHMEMDataElement<
+    T, Traits,
+    typename std::enable_if<!Traits::memory_traits::is_atomic &&
+                            std::is_same<T, double3>::value>::type> {
+  typedef const T const_value_type;
+  typedef T non_const_value_type;
+  T *ptr;
+  int pe;
+
+  KOKKOS_INLINE_FUNCTION
+  ISHMEMDataElement(T *ptr_, int pe_, int i_) : ptr(ptr_ + i_), pe(pe_) {}
+
+  KOKKOS_INLINE_FUNCTION
+  operator const_value_type() const {
+    T tmp;
+    shmem_type_g_3(&tmp.x, &(*ptr).x, pe);
+    return tmp;
+  }
+};*/
 
 }  // namespace Impl
 }  // namespace Kokkos

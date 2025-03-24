@@ -20,6 +20,7 @@
 #define KOKKOS_REMOTESPACES_ISHMEM_VIEWTRAITS_HPP
 
 namespace Kokkos {
+
 /*
  * ViewTraits class evaluated during View specialization
  */
@@ -68,8 +69,8 @@ struct ViewTraits<
       "Only one View Execution or Memory Space template argument");
 
   // Specify layout, keep subsequent space and memory traits arguments
-  using execution_space = Kokkos::Experimental::SYCL;
-  using memory_space    = Kokkos::Experimental::ISHMEMSpace;
+  using execution_space = typename Kokkos::Experimental::SYCL::execution_space;
+  using memory_space    = typename Kokkos::Experimental::ISHMEMSpace::memory_space;
   using HostMirrorSpace = typename Kokkos::Impl::HostMirror<
       Kokkos::Experimental::ISHMEMSpace>::Space;
   using array_layout  = typename execution_space::array_layout;
